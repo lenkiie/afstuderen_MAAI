@@ -5,13 +5,13 @@ import tensorflow as tf
 import cv2
 import torch
 from torch.utils.data import Dataset
-# from torch_geometric.data import Data
+from torch_geometric.data import Data
 import networkx as nx
 from skimage.filters import threshold_otsu, gaussian
 from skimage.morphology import skeletonize, binary_dilation
 from skimage.transform import resize
 import networkx as nx
-# from torch_geometric.utils import remove_self_loops
+from torch_geometric.utils import remove_self_loops
 from ultralytics import YOLO
 import cv2
 import warnings
@@ -375,7 +375,7 @@ slechte_cijfer_indexen = []
 voorspelde_reeks = []  # lijst van tuples (index, voorspeld cijfer)
 
 # Laad TFLite model
-interpreter = tf.lite.Interpreter(model_path=r"C:\Users\lenka\OneDrive\Documenten\Afstuderen Master\pipeline\git\models\classificatie_model.tflite")
+interpreter = tf.lite.Interpreter(model_path="classificatie_model.tflite")
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
@@ -515,8 +515,7 @@ def graph_to_pyg_data(G, grid_size=8, label=None):
             edge_index.append([vid, uid])
 
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-    # data = Data(x=x, edge_index=edge_index)
-    data = SimpleData(x=x, edge_index=edge_index)
+    data = Data(x=x, edge_index=edge_index)
     if label is not None:
         data.y = torch.tensor([label], dtype=torch.long)
     return data
@@ -541,77 +540,28 @@ class PyGSkeletonDataset(Dataset):
     def __getitem__(self, idx):
         return self.graphs[idx]
 
-class SimpleData:
-    def __init__(self, x, edge_index, y=None):
-        self.x = x
-        self.edge_index = edge_index
-        self.y = y
-        self.num_nodes = x.shape[0]
-
-    def to(self, device):
-        self.x = self.x.to(device)
-        self.edge_index = self.edge_index.to(device)
-        if self.y is not None:
-            self.y = self.y.to(device)
-        return self
-
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-# def reconstruct_edges(data, model, threshold=0.5):
-#     model.eval()
-#     data = data.to(device)
-#     with torch.no_grad():
-#         z = model.encode(data.x, data.edge_index)
-
-#     # Genereer alle mogelijke nodeparen in grid
-#     num_nodes = data.num_nodes
-#     row, col = torch.meshgrid(torch.arange(num_nodes), torch.arange(num_nodes), indexing='ij')
-#     full_edge_index = torch.stack([row.flatten(), col.flatten()], dim=0).to(device)
-
-#     # Decode scores (edge probabilities)
-#     scores = model.decode(z, full_edge_index).sigmoid()
-
-#     # Houd alleen edges boven drempel
-#     keep = scores > threshold
-#     edge_index_reconstructed = full_edge_index[:, keep]
-
-#     return edge_index_reconstructed.cpu()
-
-def normalize_adjacency(adj):
-    adj = adj + torch.eye(adj.size(0), device=adj.device)
-    deg = adj.sum(1)
-    deg_inv_sqrt = torch.pow(deg, -0.5)
-    deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0.
-    D_inv_sqrt = torch.diag(deg_inv_sqrt)
-    return D_inv_sqrt @ adj @ D_inv_sqrt
-
-
-# --- Converteer edge_index naar dense adjacency ---
-def edge_index_to_adj(edge_index, num_nodes):
-    adj = torch.zeros((num_nodes, num_nodes), dtype=torch.float32)
-    adj[edge_index[0], edge_index[1]] = 1.0
-    return adj
-
-def reconstruct_edges(data, model, threshold=0.9):
+def reconstruct_edges(data, model, threshold=0.5):
     model.eval()
+    data = data.to(device)
+    with torch.no_grad():
+        z = model.encode(data.x, data.edge_index)
 
-    # Genormaliseerde adjacency matrix
-    adj = edge_index_to_adj(data.edge_index, num_nodes=data.num_nodes)
-    adj_norm = normalize_adjacency(adj)
-
-    # Genereer alle mogelijke edges
+    # Genereer alle mogelijke nodeparen in grid
     num_nodes = data.num_nodes
     row, col = torch.meshgrid(torch.arange(num_nodes), torch.arange(num_nodes), indexing='ij')
-    full_edge_index = torch.stack([row.flatten(), col.flatten()], dim=0)
+    full_edge_index = torch.stack([row.flatten(), col.flatten()], dim=0).to(device)
 
-    with torch.no_grad():
-        scores = model(data.x, adj_norm, full_edge_index)
-        probs = torch.sigmoid(scores)
+    # Decode scores (edge probabilities)
+    scores = model.decode(z, full_edge_index).sigmoid()
 
-    keep = probs > threshold
+    # Houd alleen edges boven drempel
+    keep = scores > threshold
     edge_index_reconstructed = full_edge_index[:, keep]
+
     return edge_index_reconstructed.cpu()
 
 
@@ -630,11 +580,8 @@ def filter_directe_buren(edge_index):
             filtered_edges.append((u, v))
     return torch.tensor(filtered_edges).t()
 
-def remove_self_loops(edge_index):
-    mask = edge_index[0] != edge_index[1]
-    return edge_index[:, mask], None
 
-reconstructie_model = torch.jit.load(r"C:\Users\lenka\OneDrive\Documenten\Afstuderen Master\pipeline\git\models\vgae_pure_scripted.pt", map_location="cpu")
+reconstructie_model = torch.jit.load(r"C:\Users\lenka\OneDrive\Documenten\Afstuderen Master\pipeline\vgae_scripted.pt", map_location="cpu")
 reconstructie_model.eval()
 
 

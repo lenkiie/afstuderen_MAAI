@@ -1,6 +1,6 @@
 # main.py
 
-from processing_pure import (
+from processing import (
     load_and_crop_digit_region,
     rotate_image,
     enhance_image,
@@ -10,7 +10,7 @@ from processing_pure import (
     split_into_digits,
     extract_preserved_digit
 )
-from classificatie_pure import (
+from classificatie import (
     classify_with_tflite,
     classify_with_gnn
 )

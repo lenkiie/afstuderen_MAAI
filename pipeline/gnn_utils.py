@@ -2,27 +2,12 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-# from torch_geometric.data import Data
+from torch_geometric.data import Data
 import networkx as nx
 from skimage.filters import threshold_otsu, gaussian
 from skimage.morphology import skeletonize, binary_dilation
 from skimage.transform import resize
 import cv2
-
-class SimpleData:
-    def __init__(self, x, edge_index, y=None):
-        self.x = x
-        self.edge_index = edge_index
-        self.y = y
-        self.num_nodes = x.shape[0]
-
-    def to(self, device):
-        self.x = self.x.to(device)
-        self.edge_index = self.edge_index.to(device)
-        if self.y is not None:
-            self.y = self.y.to(device)
-        return self
-
 
 def resize_with_padding(img, target_size=64, inner_size=60):
     h, w = img.shape
@@ -116,8 +101,7 @@ def graph_to_pyg_data(G, grid_size=8, label=None):
             edge_index.append([uid, vid])
             edge_index.append([vid, uid])
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-    # data = Data(x=x, edge_index=edge_index)
-    data = SimpleData(x=x, edge_index=edge_index)
+    data = Data(x=x, edge_index=edge_index)
     if label is not None:
         data.y = torch.tensor([label], dtype=torch.long)
     return data
@@ -147,10 +131,6 @@ def filter_directe_buren(edge_index):
             filtered_edges.append((u, v))
     return torch.tensor(filtered_edges).t()
 
-def remove_self_loops(edge_index):
-    mask = edge_index[0] != edge_index[1]
-    return edge_index[:, mask], None
-
 def edge_index_to_image(edge_index, image_size=64, grid_size=8, line_thickness=3):
     img = np.zeros((image_size, image_size), dtype=np.uint8)
     cell_size = image_size // grid_size
@@ -160,38 +140,3 @@ def edge_index_to_image(edge_index, image_size=64, grid_size=8, line_thickness=3
         pt2 = positions[v]
         cv2.line(img, pt1, pt2, color=255, thickness=line_thickness)
     return img
-
-def normalize_adjacency(adj):
-    adj = adj + torch.eye(adj.size(0), device=adj.device)
-    deg = adj.sum(1)
-    deg_inv_sqrt = torch.pow(deg, -0.5)
-    deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0.
-    D_inv_sqrt = torch.diag(deg_inv_sqrt)
-    return D_inv_sqrt @ adj @ D_inv_sqrt
-
-
-# --- Converteer edge_index naar dense adjacency ---
-def edge_index_to_adj(edge_index, num_nodes):
-    adj = torch.zeros((num_nodes, num_nodes), dtype=torch.float32)
-    adj[edge_index[0], edge_index[1]] = 1.0
-    return adj
-
-def reconstruct_edges(data, model, threshold=0.9):
-    model.eval()
-
-    # Genormaliseerde adjacency matrix
-    adj = edge_index_to_adj(data.edge_index, num_nodes=data.num_nodes)
-    adj_norm = normalize_adjacency(adj)
-
-    # Genereer alle mogelijke edges
-    num_nodes = data.num_nodes
-    row, col = torch.meshgrid(torch.arange(num_nodes), torch.arange(num_nodes), indexing='ij')
-    full_edge_index = torch.stack([row.flatten(), col.flatten()], dim=0)
-
-    with torch.no_grad():
-        scores = model(data.x, adj_norm, full_edge_index)
-        probs = torch.sigmoid(scores)
-
-    keep = probs > threshold
-    edge_index_reconstructed = full_edge_index[:, keep]
-    return edge_index_reconstructed.cpu()
