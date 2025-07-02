@@ -1,4 +1,4 @@
-# afstuderen_MAAI
+# Graph Neural Networks voor robuuste cijferreconstructie en automatische uitlezing van analoge meters op embedded hardware
 
 Dit project bevat mijn afstudeeronderzoek voor de master applied AI. Hierin vind je mijn volledige scriptie en de bijbehorende code die ik heb gebruikt voor analyses en experimenten.
 
