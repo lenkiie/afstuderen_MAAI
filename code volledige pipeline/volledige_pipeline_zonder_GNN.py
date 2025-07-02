@@ -3,22 +3,7 @@ from skimage.morphology import reconstruction, remove_small_objects, binary_open
 import numpy as np
 import tensorflow as tf
 import cv2
-import torch
-from torch.utils.data import Dataset
-from torch_geometric.data import Data
-import networkx as nx
-from skimage.filters import threshold_otsu, gaussian
-from skimage.morphology import skeletonize, binary_dilation
-from skimage.transform import resize
-from torch_geometric.utils import dense_to_sparse
-import networkx as nx
-from torch_geometric.utils import remove_self_loops
-import cv2
 import warnings
-import torch
-from torch_geometric.nn import VGAE
-import torch.nn.functional as F
-from torch_geometric.nn import GINConv, JumpingKnowledge
 import matplotlib.pyplot as plt 
 import os
 
